@@ -1,0 +1,222 @@
+---
+title: "netflix_wrapped"
+output: html_document
+date: "2025-01-22"
+---
+
+Hey! This is a custom code that analyses Netflix usage data with R and creates some fun graphs to highlight the findings. You can download the replication data from the GitHub repository. 
+
+This code uses my Netflix data between July 2024 and January 2025, but you can use this code to analyse your Netflix data as well. Just go to the settings of your Netflix account and download the statistics from the Privacy and Data section. You should then be able to download NetflixViewingHistory.csv file that contains the information on your Netflix watch history. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+First, I install several libraries that are used for the analysis.
+
+```{r libraries, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(RColorBrewer)
+```
+
+If you want to replicate the analysis, don't forget to also set the working directory (use the address where you stored the NetflixViewingHistory file). 
+
+```{r working directory, echo = FALSE}
+setwd('####/Netflix Wrapper')
+```
+
+Next, I prepare the data for the analysis. 
+
+```{r pre-processing}
+# read NetflixViewingHistory.csv file
+netflix_data <- read.csv('NetflixViewingHistory.csv', sep = ',')
+
+# drop the information about the season and the episode 
+netflix_data$Title <- sub(":.*", "", netflix_data$Title)
+
+# make sure the Date column is in the right format
+netflix_data$Date <- as.Date(netflix_data$Date , format = "%d/%m/%Y")
+
+# define the time range you want to analyse. For me, I wanted to use only the data after July 2024. 
+netflix_data <- subset(netflix_data, netflix_data$Date > as.Date("2024-07-31"))
+
+# add a subscription column for price calculations (change if different for your case)
+netflix_data$Subscription_price <- 11
+```
+
+I can know analyse some patterns in the data. Let's see my 5 most-watched series and visualise the findings with a nice pie chart.  
+
+```{r pie_chart}
+### 5 most popular series - pie chart ###
+
+pie_data <- netflix_data %>%
+  count(Title) %>%
+  rename(Series = Title, Count = n) %>%
+  mutate(Percentage = (Count / sum(Count)) * 100) %>%
+  arrange(desc(Count)) %>% 
+  mutate(
+    Series = if_else(row_number() > 5, "Other", as.character(Series))
+  ) %>% 
+  group_by(Series) %>%
+  summarize(
+    Count = sum(Count),
+    Percentage = sum(Percentage)
+  ) %>% 
+  arrange(desc(Count))
+
+# order the categories, so that the Other category is always stored at the end of the data set. 
+pie_data$Series <- factor(pie_data$Series, 
+                              levels = c(setdiff(unique(pie_data$Series), "Other"), "Other"))
+
+# Generate a color palette from red to blue, adding grey for the Other category
+colors_tool <- colorRampPalette(c("#E50914", "blue"))(length(unique(pie_data$Series)) - 1)
+colors <- c(colors_tool, "Other" = "#808080") 
+
+names(colors) <- levels(pie_data$Series)
+
+# Create a pie chart
+ggplot(pie_data, aes(x = "", y = Count, fill = Series)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar(theta = "y") +
+  labs(
+    title = "My top 5 series.", 
+    subtitle = " (% of the total episodes and movies watched)", 
+    caption = 'Note: The "Other" category includes all series with low frequency (below 10% of the total) and all movies.'
+       ) +
+  theme_void() +
+  geom_text(aes(label = Count), position = position_stack(vjust = 0.5), 
+            color = "white", family = "Helvetica") + 
+  theme(
+    plot.background = element_rect(fill = "black", color = "black"),  
+    panel.background = element_rect(fill = "black", color = "black"),  
+    plot.title = element_text(family = "Helvetica", color = "white", size = 20, face = 'bold'),
+    plot.subtitle = element_text(family = "Helvetica", color = "white", size = 15, face = 'bold'),
+    legend.text = element_text(family = "Helvetica", color = "white"), 
+    legend.title = element_text(family = "Helvetica", color = "white"), 
+    plot.margin = margin(20, 20, 50, 20), 
+    plot.caption = element_text(family = "Helvetica", color = "white", hjust = 0, 
+                                face = "italic", margin = margin(t = 20))
+  ) +
+  scale_fill_manual(values = colors) 
+
+```
+
+Delicious in Dungeon is indeed a great series, what can I do? Surprised no to see any sitcoms in the top 5, though. Might need to watch something more relaxing and positive. 
+
+Now, let's answer the big question: the Netflix addiction. How often did I  watch anything on the website? 
+
+```{r histogram}
+## making the habits histogram ##
+
+# adding days where Netflix was not used
+all_dates <- seq.Date(from = min(netflix_data$Date), to = max(netflix_data$Date), by = "day")
+new_data <- data.frame(
+  Date = all_dates
+)
+
+# combine the new data with the original file
+hist_data <- new_data %>%
+  left_join(netflix_data, by = "Date") %>%
+  group_by(Date) %>% 
+  mutate(
+    Count = ifelse(is.na(Title), 0, 1)
+  ) %>%
+  summarise(
+    total_items = sum(Count)
+  )
+  
+# creating a histogram of Netflix usage
+
+ggplot(hist_data, aes(x = total_items)) +
+  geom_histogram(binwidth = 0.5, fill = "#E50914", color = "black") + 
+  
+  labs(
+    title = "Do I have a Netflix addiction?",
+    subtitle = 'The distribution of episodes and movies watched per day', 
+    x = 'Episodes and movies watched per day', 
+    y = "Count", 
+    caption = 'Note: when Netflix was not used, the number of episodes and movies is zero. Data is given for 170 days.') +
+  theme_minimal() +  
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, color = 'white', family = 'Helvetica'),
+    axis.text.y = element_text(color = 'white', family = 'Helvetica'),
+    axis.title.x = element_text(color = 'white', family = 'Helvetica'),
+    axis.title.y = element_text(color = 'white', family = 'Helvetica'),
+    plot.background = element_rect(fill = "black", color = "black"),
+    panel.background = element_rect(fill = "black", color = "black"),  
+    plot.title = element_text(family = "Helvetica", color = "white", size = 20, face = 'bold'),
+    plot.subtitle = element_text(family = "Helvetica", color = "white", size = 15, face = 'bold'),
+    plot.margin = margin(20, 20, 50, 20), 
+    plot.caption = element_text(family = "Helvetica", color = "white", hjust = 0, 
+                                face = "italic", margin = margin(t = 20))
+  )
+```
+
+No addiction for me this time! It looks like I was not using the platform most of the days. Got into binge-watching a couple of times but a healthy Netflix usage overall. 
+
+Finally, considering my use of the platform, was Netflix money well spent? I can gain insight by calculating the price per episode/movie watched for each month. 
+
+```{r plot}
+
+### Price per item per month ###
+
+# Prepare the plot summary data
+plot_data <- netflix_data %>%
+  mutate(Date.month = format(Date, "%Y-%m")) %>% 
+  group_by(Date.month) %>% 
+  summarize(
+    total_items = n(),
+    Subscription_price = first(Subscription_price) 
+  ) %>%
+  arrange(Date.month) %>%
+  mutate(Price_per_item = round(Subscription_price / total_items, 2))  
+
+# identify the most expensive month 
+max_month <- plot_data[which.max(plot_data$Price_per_item), "Date.month"]
+
+plot_data <- plot_data %>%
+  mutate(fill_color = ifelse(Date.month == max_month$Date.month, "blue", "#E50914"))
+
+# create a bar plot
+ggplot(plot_data, aes(x = Date.month, y = Price_per_item, fill = fill_color)) +
+  geom_bar(stat = "identity") + 
+  scale_fill_manual(values = c("blue" = "blue", "#E50914" = "#E50914")) +
+  guides(fill = "none") +
+  labs(
+    title = "How much I spent per each 
+episode / movie watched?",
+    subtitle = '(in £)', 
+    x = "Month", 
+    y = "Price per episode / movie (£)", 
+    caption = 'Note: given a subscription price of 10.99£ per month.') +
+  theme_minimal() +  
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, color = 'white', family = 'Helvetica'),
+    axis.text.y = element_text(color = 'white', family = 'Helvetica'),
+    axis.title.x = element_text(color = 'white', family = 'Helvetica'),
+    axis.title.y = element_text(color = 'white', family = 'Helvetica'),
+    plot.background = element_rect(fill = "black", color = "black"),
+    panel.background = element_rect(fill = "black", color = "black"),  
+    plot.title = element_text(family = "Helvetica", color = "white", size = 20, face = 'bold'),
+    plot.subtitle = element_text(family = "Helvetica", color = "white", size = 15, face = 'bold'),
+    plot.margin = margin(20, 20, 50, 20), 
+    plot.caption = element_text(family = "Helvetica", color = "white", hjust = 0, 
+                                    face = "italic", margin = margin(t = 20))
+  )
+
+```
+
+It seems that I paid over 2 pounds per episode/movie in September; not a great investment... I used the platform more often in October, November and January, though, spending around 50 pence per episode / movie. Won't delete the account just yet, but it is clearly something to reflect on. 
+
+And that was it for today! I would have done more graphs, but I just found out about this Sakamoto Days anime on Netflix and its quite addictive..
+
+Thanks for checking out my code and feel free to adapt and improve it for your purposes. If you find any of this interesting or would need any clarifications, feel free to approach me on LinkedIn at  linkedin.com/in/mikhail-korneev/ or via GitHub at https://github.com/mishanhamon. 
+
+
+
+
+
+
+
