@@ -185,11 +185,11 @@ ggplot(plot_data, aes(x = Date.month, y = Price_per_item, fill = fill_color)) +
   scale_fill_manual(values = c("blue" = "blue", "#E50914" = "#E50914")) +
   guides(fill = "none") +
   labs(
-    title = "How much I spent per each 
-episode / movie watched?",
+    title = "How much did I spend per each 
+episode/movie watched?",
     subtitle = '(in £)', 
     x = "Month", 
-    y = "Price per episode / movie (£)", 
+    y = "Price per episode/movie (£)", 
     caption = 'Note: given a subscription price of 10.99£ per month.') +
   theme_minimal() +  
   theme(
